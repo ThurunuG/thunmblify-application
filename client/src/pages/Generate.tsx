@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { colorSchemes, dummyThumbnails, type AspectRatio, type IThumbnail, type ThumbnailStyle } from '../assets/assets';
 import SoftBackdrop from '../components/SoftBackdrop';
 import { button } from 'motion/react-m';
@@ -7,10 +7,17 @@ import AspectRatioSelector from '../components/AspectRatioSelector';
 import StyleSelector from '../components/StyleSelector';
 import ColorSchemeSelector from '../components/ColorSchemeSelector';
 import PreviewPanel from '../components/PreviewPanel';
+import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
+import api from '../configs/api';
 
 const Generate = () => {
 
   const {id} = useParams();
+  const {pathname} = useLocation()
+  const navigate = useNavigate()
+  const {isLoggedIn} = useAuth()
+
   const [title, setTitle] = useState('')
   const [additionalDetails, setadditionalDetails] = useState('')
 
@@ -24,28 +31,60 @@ const Generate = () => {
   const [styleDropdownOpen, setstyleDropdownOpen] = useState(false)
 
   const handleGenerate = async () => {
+    if(!isLoggedIn) return toast.error('Please login to generate thumbnails')
+    if(!title.trim()) return toast.error('Title is required')
+      setLoading(true)
 
+    const api_payload = {
+      title,
+      prompt: additionalDetails,
+      style,
+      aspect_ratio: aspectRatio,
+      color_scheme: colorSchemeId,
+      text_overlay: true,
+    }
+
+    const {data} = await api.post('/api/thumbnail/generate', api_payload);
+
+    if(data.thumbnail){
+      navigate('/generate/' + data.thumbnail._id);
+      toast.success(data.message)
+    }
   }
 
   const fetchThumbnail = async () => {
-    if(id){
-      const thumbnail : any = dummyThumbnails.find((thumbnail)=>thumbnail._id === id);
-      setThumbnail(thumbnail)
-      setadditionalDetails(thumbnail.user_prompt)
-      setTitle(thumbnail.title)
-      setcolorSchemeId(thumbnail.color_scheme)
-      setAspectRation(thumbnail.aspect_ratio)
-      setStyle(thumbnail.style)
-      setLoading(false)
+    try {
+      const {data} = await api.get(`/api/user/thumbnail/${id}`)
+      setThumbnail(data?.thumbnail as IThumbnail);
+      setLoading(!data?.thumbnail?.image_url);
+      setadditionalDetails(data?.thumbnail?.user_prompt);
+      setTitle(data?.thumbnail?.title);
+      setcolorSchemeId(data?.thumbnail?.color_scheme);
+      setAspectRation(data?.thumbnail?.aspect_ratio);
+      setStyle(data?.thumbnail?.style)
+    } catch (error: any) {
+      console.log(error);
+      toast.error(error?.response?.data?.message || error.message)
     }
-
   }
 
   useEffect(()=>{
-    if(id){
+    if(isLoggedIn && id){
       fetchThumbnail()
     }
-  },[id])
+    if(id && loading && isLoggedIn){
+      const interval = setInterval(()=>{
+        fetchThumbnail()
+      }, 5000);
+      return ()=> clearInterval(interval)
+    }
+  },[id, loading, isLoggedIn])
+
+  useEffect(()=>{
+    if(!id && thumbnail){
+      setThumbnail(null)
+    }
+  }, [pathname])
   return (
     <>
        <SoftBackdrop />

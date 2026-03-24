@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react'
 import SoftBackdrop from '../components/SoftBackdrop'
 import { dummyThumbnails, type IThumbnail } from '../assets/assets'
 import { Link, useNavigate } from 'react-router-dom'
-import { div } from 'motion/react-m'
 import { ArrowRightIcon, ArrowUpRightIcon, Download, DownloadIcon, TrashIcon } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import api from '../configs/api'
+import toast from 'react-hot-toast'
 
 const MyGeneration = () => {
 
@@ -13,26 +15,53 @@ const MyGeneration = () => {
     '9:16': 'aspect-[9/16]',
   }
 
+  const {isLoggedIn} = useAuth()
   const navigate = useNavigate()
   const [thumbnails, setThumbnails] = useState<IThumbnail[]>([])
   const [loading, setLoading] = useState(false)
 
   const fetchThumbnails = async () =>{
-    setThumbnails(dummyThumbnails as unknown as IThumbnail[])
-    setLoading(false)
+    try {
+      setLoading(true)
+      const {data} = await api.get('/api/user/thumbnails')
+      setThumbnails(data.thumbnails || [])
+    } catch (error: any) {
+      console.log(error);
+      toast.error(error?.response?.data?.message || error.message)
+    } finally{
+      setLoading(false);
+    }
   }
 
   const handleDowload = (img_url: string)=>{
-    window.open(img_url, '_blank')
+    const link = document.createElement('a');
+    link.href = img_url.replace('/upload', '/upload/fl_attachment')
+    document.body.appendChild(link);
+    link.click()
+    link.remove()
   }
 
   const handleDelete = async (id: string)=>{
-    console.log(id)
+    try {
+      const confirm = window.confirm('Are you sure want to delete this thumbnail?')
+      if(!confirm) return;
+
+      const {data} = await api.delete(`/api/thumbnail/delete/${id}`)
+      toast.success(data.message)
+      setThumbnails(thumbnails.filter((t)=>{
+        t._id !== id
+      }))
+    } catch (error: any) {
+      console.log(error);
+      toast.error(error?.response?.data?.message || error.message)
+    }
   }
 
   useEffect(()=>{
-    fetchThumbnails()
-  }, [])
+    if(isLoggedIn){
+      fetchThumbnails()
+    }
+  }, [isLoggedIn])
   return (
     <>
       <SoftBackdrop />
